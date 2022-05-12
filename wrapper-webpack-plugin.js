@@ -34,14 +34,22 @@ class WrapperPlugin {
 
 		compiler.hooks.compilation.tap('WrapperPlugin', (compilation) => {
 			if (this.afterOptimizations) {
-				compilation.hooks.afterOptimizeChunkAssets.tap('WrapperPlugin', (chunks) => {
-					wrapChunks(compilation, chunks, footer, header);
-				});
+				compilation.hooks.processAssets.tap(
+					{
+						name: 'WrapperPlugin',
+						stage: compiler.webpack.Compilation.PROCESS_ASSETS_STAGE_OPTIMIZE_HASH,
+					},
+					(chunks) => wrapChunks(compilation, chunks),
+				);
+				return;
 			} else {
-				compilation.hooks.optimizeChunkAssets.tapAsync('WrapperPlugin', (chunks, done) => {
-					wrapChunks(compilation, chunks, footer, header);
-					done();
-				});
+				compilation.hooks.processAssets.tap(
+					{
+						name: 'WrapperPlugin',
+						stage: compiler.webpack.Compilation.PROCESS_ASSETS_STAGE_ADDITIONS,
+					},
+					(chunks) => wrapChunks(compilation, chunks),
+				);
 			}
 		});
 
@@ -57,21 +65,9 @@ class WrapperPlugin {
 		}
 
 		function wrapChunks(compilation, chunks) {
-			for (const chunk of chunks) {
-				if (!chunk.rendered) {
-					// Skip already rendered (cached) chunks
-					// to avoid rebuilding unchanged code.
-					continue;
-				}
-
-				const args = {
-					hash: compilation.hash,
-					chunkhash: chunk.hash,
-				};
-				for (const fileName of chunk.files) {
-					if (ModuleFilenameHelpers.matchObject(tester, fileName)) {
-						wrapFile(compilation, fileName, args);
-					}
+			for (const name of Object.keys(chunks)) {
+				if (ModuleFilenameHelpers.matchObject(tester, name)) {
+					wrapFile(compilation, name, compilation.hash);
 				}
 			}
 		} // wrapChunks
